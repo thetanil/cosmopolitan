@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "master"
+      - "gh-actions-matrix-artifacts"
   pull_request:
     branches:
       - "master"
@@ -17,11 +18,29 @@ jobs:
     strategy:
       matrix:
         mode: ["", tiny, opt]
+        os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v3
 
       - name: support ape bins
         run: sudo sh -c "echo ':APE:M::MZqFpD::/bin/sh:' >/proc/sys/fs/binfmt_misc/register"
 
-      - name: make matrix
+      - name: make_matrix
         run: V=0 make -j2 MODE=${{ matrix.mode }}
+
+      - name: release
+        uses: actions/upload-artifact@v3
+        with:
+          name: bins
+          path: |
+            o
+  sanity_check:
+    runs-on: [ubuntu-latest, windows-latest]
+    steps:
+      - name: download
+        uses: actions/download-artifact@v3
+        with:
+          name: bins
+      - name: sanity
+        run: |
+          o/test/tool/net/redbean_test.com

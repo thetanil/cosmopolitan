@@ -18,7 +18,6 @@ jobs:
     strategy:
       matrix:
         mode: ["", tiny, opt]
-        os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v3
 

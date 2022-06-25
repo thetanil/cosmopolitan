@@ -27,19 +27,19 @@ jobs:
       - name: make_matrix
         run: V=0 make -j2 MODE=${{ matrix.mode }}
 
-      - name: release
+      - name: upload
         uses: actions/upload-artifact@v3
         with:
-          name: bins
+          name: redbean_test
           path: |
-            o
+            o/test/tool/net/redbean_test.com
   sanity_check:
     runs-on: [ubuntu-latest, windows-latest]
     steps:
       - name: download
         uses: actions/download-artifact@v3
         with:
-          name: bins
+          name: redbean_test
       - name: sanity
         run: |
           o/test/tool/net/redbean_test.com

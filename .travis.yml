@@ -13,4 +13,4 @@ matrix:
       env:
         - MATRIX_EVAL="CC=gcc-4.9 && CXX=g++-4.9"
 script:
-  - V=0 make -j16 MODE=rel
+  - V=0 make -j MODE=

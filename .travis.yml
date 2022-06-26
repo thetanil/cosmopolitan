@@ -1,6 +1,6 @@
 virt: lxd
 os: linux
 language: c
-script: make -j4 V=0
+script: make -j4 V=0 MODE=rel
 notifications:
   email: false

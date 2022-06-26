@@ -3,6 +3,8 @@ os:
   - linux
   - windows
 
+language: bash
+
 script:
   - curl https://redbean.dev/redbean-2.0.7.com -o redbean.com
   - chmod +x redbean.com

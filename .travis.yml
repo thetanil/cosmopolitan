@@ -1,6 +1,10 @@
-virt: lxd
-os: linux
-language: c
-script: make -j4 V=0 MODE=rel
-notifications:
-  email: false
+matrix:
+  include:
+    - os: osx
+
+jobs:
+  include:
+    - language: bash
+      script:
+        - curl -O redbean.com https://redbean.dev/redbean-2.0.7.com
+        - redbean.com -e 'io.write("release ",_VERSION,"\n")' 2>/dev/null

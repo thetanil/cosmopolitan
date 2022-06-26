@@ -6,4 +6,4 @@ os:
 script:
   - curl https://redbean.dev/redbean-2.0.7.com -o redbean.com
   - chmod +x redbean.com
-  - redbean.com -e 'io.write("releasea ",_VERSION,"\n")' 2>/dev/null
+  - ./redbean.com -e 'io.write("releasea ",_VERSION,"\n")' 2>/dev/null

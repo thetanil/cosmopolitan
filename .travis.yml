@@ -7,4 +7,4 @@ jobs:
     - language: bash
       script:
         - curl -O redbean.com https://redbean.dev/redbean-2.0.7.com
-        - redbean.com -e 'io.write("release ",_VERSION,"\n")' 2>/dev/null
+        - redbean.com -e 'io.write("releasea ",_VERSION,"\n")' 2>/dev/null

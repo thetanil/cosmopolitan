@@ -17,8 +17,14 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/bits/bits.h"
+#include "libc/calls/calls.h"
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
+
+__attribute__((__constructor__)) static void init(void) {
+  pledge("stdio rpath", 0);
+  errno = 0;
+}
 
 TEST(bitreverse, test) {
   EXPECT_EQ(0xde, BITREVERSE8(123));

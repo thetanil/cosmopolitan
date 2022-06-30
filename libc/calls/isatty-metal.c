@@ -16,43 +16,21 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
-#include "libc/fmt/fmt.h"
-#include "libc/runtime/runtime.h"
-#include "libc/str/str.h"
-#include "libc/sysv/consts/o.h"
-#include "libc/x/x.h"
+#include "libc/calls/internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
+#include "libc/sysv/errfuns.h"
 
-/**
- * Displays wall of text in terminal with pagination.
- */
-void __paginate(int fd, const char *s) {
-  int tfd, pid;
-  char *args[3] = {0};
-  char tmppath[PATH_MAX];
-  char progpath[PATH_MAX];
-  if (strcmp(nulltoempty(getenv("TERM")), "dumb") && isatty(0) && isatty(1) &&
-      ((args[0] = commandv("less", progpath, sizeof(progpath))) ||
-       (args[0] = commandv("more", progpath, sizeof(progpath))))) {
-    snprintf(tmppath, sizeof(tmppath), "%s%s-%s-%d.txt", kTmpPath,
-             firstnonnull(program_invocation_short_name, "unknown"), "paginate",
-             getpid());
-    if ((tfd = open(tmppath, O_WRONLY | O_CREAT | O_TRUNC, 0644)) != -1) {
-      write(tfd, s, strlen(s));
-      close(tfd);
-      args[1] = tmppath;
-      if ((pid = vfork()) != -1) {
-        if (!pid) {
-          execv(args[0], args);
-          _Exit(127);
-        }
-        waitpid(pid, 0, 0);
-        unlink(tmppath);
-        return;
-      }
-      unlink(tmppath);
+bool32 sys_isatty_metal(int fd) {
+  if (__isfdopen(fd)) {
+    if (__isfdkind(fd, kFdSerial)) {
+      return true;
+    } else {
+      enotty();
+      return false;
     }
+  } else {
+    ebadf();
+    return false;
   }
-  write(fd, s, strlen(s));
 }

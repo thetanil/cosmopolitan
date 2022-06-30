@@ -23,6 +23,11 @@
 #include "libc/testlib/testlib.h"
 #include "libc/time/time.h"
 
+__attribute__((__constructor__)) static void init(void) {
+  pledge("stdio rpath", 0);
+  errno = 0;
+}
+
 // TEST(select, allZero) {
 //  // todo: figure out how to test block until signal w/ select
 //  EXPECT_SYS(0, 0, select(0, 0, 0, 0, 0));

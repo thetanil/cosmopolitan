@@ -30,6 +30,11 @@ char testlib_enable_tmp_setup_teardown;
 char p[2][PATH_MAX];
 struct stat st;
 
+__attribute__((__constructor__)) static void init(void) {
+  pledge("stdio rpath wpath cpath fattr", 0);
+  errno = 0;
+}
+
 TEST(symlink, enoent) {
   ASSERT_SYS(ENOENT, -1, symlink("o/foo", ""));
   ASSERT_SYS(ENOENT, -1, symlink("o/foo", "o/bar"));

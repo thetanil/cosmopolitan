@@ -20,7 +20,7 @@
 #include "libc/errno.h"
 #include "libc/sysv/consts/pr.h"
 
-bool __is_linux_2_6_23(void) {
+privileged bool __is_linux_2_6_23(void) {
   int rc;
   if (!IsLinux()) return false;
   asm volatile("syscall"

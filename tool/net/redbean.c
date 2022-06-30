@@ -37,6 +37,7 @@
 #include "libc/fmt/itoa.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/intrin/nomultics.internal.h"
+#include "libc/intrin/spinlock.h"
 #include "libc/intrin/wait0.internal.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
@@ -145,7 +146,7 @@ STATIC_YOINK("ShowCrashReportsEarly");
 #define REDBEAN "redbean"
 #endif
 
-#define VERSION          0x020007
+#define VERSION          0x020008
 #define HEARTBEAT        5000 /*ms*/
 #define HASH_LOAD_FACTOR /* 1. / */ 4
 #define MONITOR_MICROS   150000
@@ -733,7 +734,7 @@ static void ProgramPrivateKey(const char *p, size_t n) {
   rc = mbedtls_pk_parse_key(key, waqapi, n + 1, 0, 0);
   mbedtls_platform_zeroize(waqapi, n);
   free(waqapi);
-  if (rc != 0) DIEF("(ssl) error: load key (grep -0x%04x)", -rc);
+  if (rc != 0) FATALF("(ssl) error: load key (grep -0x%04x)", -rc);
   for (i = 0; i < certs.n; ++i) {
     if (certs.p[i].cert && !certs.p[i].key &&
         !mbedtls_pk_check_pair(&certs.p[i].cert->pk, key)) {
@@ -754,13 +755,13 @@ static void ProgramFile(const char *path, void program(const char *, size_t)) {
     mbedtls_platform_zeroize(p, n);
     free(p);
   } else {
-    DIEF("(srvr) error: failed to read file %`'s", path);
+    FATALF("(srvr) error: failed to read file %`'s", path);
   }
 }
 
 static void ProgramPort(long port) {
   if (!(0 <= port && port <= 65535)) {
-    DIEF("(cfg) error: bad port: %d", port);
+    FATALF("(cfg) error: bad port: %d", port);
   }
   if (port == 443) listeningonport443 = true;
   ports.p = realloc(ports.p, ++ports.n * sizeof(*ports.p));
@@ -784,12 +785,12 @@ static void ProgramAddr(const char *addr) {
       struct addrinfo hint = {AI_NUMERICSERV, AF_INET, SOCK_STREAM,
                               IPPROTO_TCP};
       if ((rc = getaddrinfo(addr, "0", &hint, &ai)) != EAI_SUCCESS) {
-        DIEF("(cfg) error: bad addr: %s (EAI_%s)", addr, gai_strerror(rc));
+        FATALF("(cfg) error: bad addr: %s (EAI_%s)", addr, gai_strerror(rc));
       }
       ip = ntohl(ai->ai_addr4->sin_addr.s_addr);
       freeaddrinfo(ai);
     } else {
-      DIEF("(cfg) error: ProgramAddr() needs an IP in MODE=tiny: %s", addr);
+      FATALF("(cfg) error: ProgramAddr() needs an IP in MODE=tiny: %s", addr);
     }
   }
   ips.p = realloc(ips.p, ++ips.n * sizeof(*ips.p));
@@ -801,11 +802,11 @@ static void ProgramRedirect(int code, const char *sp, size_t sn, const char *dp,
   long i, j;
   struct Redirect r;
   if (code && code != 301 && code != 302 && code != 307 && code != 308) {
-    DIEF("(cfg) error: unsupported redirect code %d", code);
+    FATALF("(cfg) error: unsupported redirect code %d", code);
   }
 
   if (!(FreeLater(EncodeHttpHeaderValue(dp, dn, 0)))) {
-    DIEF("(cfg) error: invalid location %s", dp);
+    FATALF("(cfg) error: invalid location %s", dp);
   }
 
   r.code = code;
@@ -836,7 +837,7 @@ static void ProgramRedirectArg(int code, const char *s) {
   const char *p;
   n = strlen(s);
   if (!(p = memchr(s, '=', n))) {
-    DIEF("(cfg) error: redirect arg missing '='");
+    FATALF("(cfg) error: redirect arg missing '='");
   }
   ProgramRedirect(code, s, p - s, p + 1, n - (p - s + 1));
 }
@@ -870,7 +871,7 @@ static inline void GetRemoteAddr(uint32_t *ip, uint16_t *port) {
       (IsPrivateIp(*ip) || IsLoopbackIp(*ip))) {
     if (ParseForwarded(HeaderData(kHttpXForwardedFor),
                        HeaderLength(kHttpXForwardedFor), ip, port) == -1)
-      WARNF("invalid X-Forwarded-For value: %`'.*s",
+      WARNF("(srvr) invalid X-Forwarded-For value: %`'.*s",
             HeaderLength(kHttpXForwardedFor), HeaderData(kHttpXForwardedFor));
   }
 }
@@ -898,7 +899,7 @@ static void ProgramBrand(const char *s) {
   free(brand);
   free(serverheader);
   if (!(p = EncodeHttpHeaderValue(s, -1, 0))) {
-    DIEF("(cfg) error: brand isn't latin1 encodable: %`'s", s);
+    FATALF("(cfg) error: brand isn't latin1 encodable: %`'s", s);
   }
   brand = strdup(s);
   serverheader = xasprintf("Server: %s\r\n", p);
@@ -921,7 +922,7 @@ static void ProgramTimeout(long ms) {
     timeout.tv_usec = 0;
   } else {
     if (ms < MINTIMEOUT) {
-      DIEF("(cfg) error: timeout needs to be %dms or greater", MINTIMEOUT);
+      FATALF("(cfg) error: timeout needs to be %dms or greater", MINTIMEOUT);
     }
     d = ldiv(ms, 1000);
     timeout.tv_sec = d.quot;
@@ -968,7 +969,7 @@ static void ProgramDirectory(const char *path) {
   size_t n;
   struct stat st;
   if (stat(path, &st) == -1 || !S_ISDIR(st.st_mode)) {
-    DIEF("(cfg) error: not a directory: %`'s", path);
+    FATALF("(cfg) error: not a directory: %`'s", path);
   }
   s = strdup(path);
   n = strlen(s);
@@ -987,7 +988,7 @@ static void ProgramHeader(const char *s) {
       case kHttpContentEncoding:
       case kHttpContentRange:
       case kHttpLocation:
-        DIEF("(cfg) error: can't program header: %`'s", s);
+        FATALF("(cfg) error: can't program header: %`'s", s);
       case kHttpServer:
         ProgramBrand(p + 1);
         break;
@@ -999,7 +1000,7 @@ static void ProgramHeader(const char *s) {
     }
     free(v);
   } else {
-    DIEF("(cfg) error: illegal header: %`'s", s);
+    FATALF("(cfg) error: illegal header: %`'s", s);
   }
 }
 
@@ -1024,13 +1025,13 @@ static bool IsServerFd(int fd) {
 static void ChangeUser(void) {
   if (changegid) {
     if (setgid(changegid)) {
-      FATALF("setgid() failed: %m");
+      FATALF("(cfg) setgid() failed: %m");
     }
   }
   // order matters
   if (changeuid) {
     if (setuid(changeuid)) {
-      FATALF("setuid() failed: %m");
+      FATALF("(cfg) setuid() failed: %m");
     }
   }
 }
@@ -1235,7 +1236,7 @@ static void WaitAll(void) {
         if (killed) {
           killed = false;
           terminated = false;
-          WARNF("(srvr) redbean shall terminate harder");
+          WARNF("(srvr) server shall terminate harder");
           KillGroup();
         }
         errno = 0;
@@ -1781,7 +1782,7 @@ static void ConfigureCertificate(mbedtls_x509write_cert *cw, struct Cert *ca,
       (r = mbedtls_x509write_crt_set_ext_key_usage(cw, type)) ||
       (r = mbedtls_x509write_crt_set_subject_name(cw, subject)) ||
       (r = mbedtls_x509write_crt_set_issuer_name(cw, issuer))) {
-    DIEF("(ssl) configure certificate (grep -0x%04x)", -r);
+    FATALF("(ssl) configure certificate (grep -0x%04x)", -r);
   }
   free(subject);
   free(issuer);
@@ -3401,9 +3402,9 @@ static void StoreAsset(char *path, size_t pathlen, char *data, size_t datalen,
   size_t oldcdirsize, oldcdiroffset, records, cdiroffset, cdirsize, complen,
       uselen;
   if (IsOpenbsd() || IsNetbsd() || IsWindows()) {
-    DIEF("(cfg) StoreAsset() not available on Windows/NetBSD/OpenBSD yet");
+    FATALF("(cfg) StoreAsset() not available on Windows/NetBSD/OpenBSD yet");
   }
-  INFOF("Storing asset %`'s", path);
+  INFOF("(srvr) storing asset %`'s", path);
   disk = gflags = iattrs = 0;
   if (_isutf8(path, pathlen)) gflags |= kZipGflagUtf8;
   if (_istext(data, datalen)) iattrs |= kZipIattrText;
@@ -3429,7 +3430,11 @@ static void StoreAsset(char *path, size_t pathlen, char *data, size_t datalen,
     }
   }
   //////////////////////////////////////////////////////////////////////////////
-  CHECK_NE(-1, fcntl(zfd, F_SETLKW, &(struct flock){F_WRLCK}));
+  if (-1 == fcntl(zfd, F_SETLKW, &(struct flock){F_WRLCK})) {
+    WARNF("can't place write lock on file descriptor %d: %s", zfd,
+          strerror(errno));
+    return;
+  }
   OpenZip(false);
   now = nowl();
   a = GetAssetZip(path, pathlen);
@@ -3587,11 +3592,11 @@ static void StoreFile(char *path) {
   if (startswith(target, "./")) target += 2;
   tlen = strlen(target);
   if (!IsReasonablePath(target, tlen))
-    DIEF("(cfg) error: can't store %`'s: contains '.' or '..' segments",
-         target);
-  if (lstat(path, &st) == -1) DIEF("(cfg) error: can't stat %`'s: %m", path);
+    FATALF("(cfg) error: can't store %`'s: contains '.' or '..' segments",
+           target);
+  if (lstat(path, &st) == -1) FATALF("(cfg) error: can't stat %`'s: %m", path);
   if (!(p = xslurp(path, &plen)))
-    DIEF("(cfg) error: can't read %`'s: %m", path);
+    FATALF("(cfg) error: can't read %`'s: %m", path);
   StoreAsset(target, tlen, p, plen, st.st_mode & 0777);
   free(p);
 }
@@ -3602,7 +3607,7 @@ static void StorePath(const char *dirpath) {
   struct dirent *e;
   if (!isdirectory(dirpath) && !endswith(dirpath, "/"))
     return StoreFile(dirpath);
-  if (!(d = opendir(dirpath))) DIEF("(cfg) error: can't open %`'s", dirpath);
+  if (!(d = opendir(dirpath))) FATALF("(cfg) error: can't open %`'s", dirpath);
   while ((e = readdir(d))) {
     if (strcmp(e->d_name, ".") == 0) continue;
     if (strcmp(e->d_name, "..") == 0) continue;
@@ -4946,8 +4951,9 @@ static bool LuaRunAsset(const char *path, bool mandatory) {
       effectivepath.p = path;
       effectivepath.n = pathlen;
       DEBUGF("(lua) LuaRunAsset(%`'s)", path);
-      status =
-          luaL_loadbuffer(L, code, codelen, FreeLater(xasprintf("@%s", path)));
+      status = luaL_loadbuffer(
+          L, code, codelen,
+          FreeLater(xasprintf("@%s%s", a->file ? "" : "/zip", path)));
       if (status != LUA_OK || LuaCallWithTrace(L, 0, 0, NULL) != LUA_OK) {
         LogLuaError("lua code", lua_tostring(L, -1));
         lua_pop(L, 1);  // pop error
@@ -5468,7 +5474,7 @@ Content-Length: 0\r\n\
 
 static void EnterMeltdownMode(void) {
   if (shared->lastmeltdown && nowl() - shared->lastmeltdown < 1) return;
-  WARNF("(srvr) redbean is melting down (%,d workers)", shared->workers);
+  WARNF("(srvr) server is melting down (%,d workers)", shared->workers);
   LOGIFNEG1(kill(0, SIGUSR2));
   shared->lastmeltdown = nowl();
   ++shared->c.meltdowns;
@@ -6798,7 +6804,7 @@ static void MakeExecutableModifiable(void) {
   close(zfd);
   ft = __ftrace;
   if ((zfd = OpenExecutable()) == -1) {
-    WARNF("(srvr) can't restore .ape");
+    WARNF("(srvr) can't open executable for modification: %m");
   }
   if (ft > 0) {
     __ftrace = 0;
@@ -6828,13 +6834,13 @@ static int HandleReadline(void) {
         errno = 0;
         return 0;
       } else {
-        WARNF("unexpected terminal error %d% m", status);
+        WARNF("(srvr) unexpected terminal error %d% m", status);
         errno = 0;
         return 0;
       }
     }
     DisableRawMode();
-    LUA_REPL_LOCK;
+    lua_repl_lock();
     if (status == LUA_OK) {
       status = lua_runchunk(L, 0, LUA_MULTRET);
     }
@@ -6843,7 +6849,7 @@ static int HandleReadline(void) {
     } else {
       lua_report(L, status);
     }
-    LUA_REPL_UNLOCK;
+    lua_repl_unlock();
     EnableRawMode();
   }
 }
@@ -6859,14 +6865,14 @@ static int HandlePoll(int ms) {
         if (polls[pollid].fd < 0) continue;
         if (polls[pollid].fd) {
           // handle listen socket
-          LUA_REPL_LOCK;
+          lua_repl_lock();
           serverid = pollid - 1;
           assert(0 <= serverid && serverid < servers.n);
           serveraddr = &servers.p[serverid].addr;
           ishandlingconnection = true;
           rc = HandleConnection(serverid);
           ishandlingconnection = false;
-          LUA_REPL_UNLOCK;
+          lua_repl_unlock();
           if (rc == -1) return -1;
 #ifndef STATIC
         } else {
@@ -6987,18 +6993,18 @@ static int EventLoop(int ms) {
   while (!terminated) {
     errno = 0;
     if (zombied) {
-      LUA_REPL_LOCK;
+      lua_repl_lock();
       ReapZombies();
-      LUA_REPL_UNLOCK;
+      lua_repl_unlock();
     } else if (invalidated) {
-      LUA_REPL_LOCK;
+      lua_repl_lock();
       HandleReload();
-      LUA_REPL_UNLOCK;
+      lua_repl_unlock();
       invalidated = false;
     } else if (meltdown) {
-      LUA_REPL_LOCK;
+      lua_repl_lock();
       EnterMeltdownMode();
-      LUA_REPL_UNLOCK;
+      lua_repl_unlock();
       meltdown = false;
     } else if ((t = nowl()) - lastheartbeat > HEARTBEAT / 1000.) {
       lastheartbeat = t;
@@ -7039,9 +7045,9 @@ static int WindowsReplThread(void *arg) {
   }
   DisableRawMode();
   lua_freerepl();
-  LUA_REPL_LOCK;
+  lua_repl_lock();
   lua_settop(L, 0);  // clear stack
-  LUA_REPL_UNLOCK;
+  lua_repl_unlock();
   if ((sig = linenoiseGetInterrupt())) {
     raise(sig);
   }
@@ -7070,7 +7076,7 @@ static void TlsInit(void) {
   if (unsecure) return;
 
   if (suiteb && !X86_HAVE(AES)) {
-    WARNF("you're using suite b crypto but you don't have aes-ni");
+    WARNF("(srvr) requested suite b crypto, but aes-ni is not present");
   }
 
   if (!sslinitialized) {
@@ -7223,7 +7229,7 @@ static void GetOpts(int argc, char *argv[]) {
       case 'f':
         funtrace = true;
         if (ftrace_install() == -1) {
-          WARNF("ftrace failed to install %m");
+          WARNF("(srvr) ftrace failed to install %m");
         }
         break;
       default:

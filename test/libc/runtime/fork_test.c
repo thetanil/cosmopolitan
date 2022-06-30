@@ -29,6 +29,11 @@
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
 
+__attribute__((__constructor__)) static void init(void) {
+  pledge("stdio rpath proc", 0);
+  errno = 0;
+}
+
 TEST(fork, testPipes) {
   int a, b;
   int ws, pid;

@@ -22,6 +22,11 @@
 #include "libc/testlib/testlib.h"
 #include "libc/x/x.h"
 
+__attribute__((__constructor__)) static void init(void) {
+  pledge("stdio rpath tty", 0);
+  errno = 0;
+}
+
 /**
  * @fileoverview platform arguments tool
  *

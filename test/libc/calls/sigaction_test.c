@@ -31,8 +31,12 @@
 #include "third_party/xed/x86.h"
 
 struct sigaction oldsa;
-
 volatile bool gotsigint;
+
+__attribute__((__constructor__)) static void init(void) {
+  pledge("stdio rpath proc", 0);
+  errno = 0;
+}
 
 void OnSigInt(int sig) {
   CheckStackIsAligned();

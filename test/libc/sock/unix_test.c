@@ -31,6 +31,11 @@
 #include "libc/testlib/testlib.h"
 #include "libc/time/time.h"
 
+__attribute__((__constructor__)) static void init(void) {
+  pledge("stdio rpath cpath proc unix", 0);
+  errno = 0;
+}
+
 char testlib_enable_tmp_setup_teardown;
 
 void DatagramServer(void) {
